@@ -2,4 +2,11 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="primary">#0D47A1</color> <!-- Dark Blue -->
+    <color name="secondary">#42A5F5</color> <!-- Light Blue -->
+    <color name="background">#E3F2FD</color> <!-- Light Sky Blue -->
+    <color name="textPrimary">#FFFFFF</color> <!-- White -->
+    <color name="textSecondary">#212121</color> <!-- Dark Gray -->
+    <color name="cardBackground">#1E88E5</color> <!-- Medium Blue -->
+
 </resources>
