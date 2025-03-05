@@ -1,131 +1,117 @@
 package com.manishkumar.weather;
 
-import android.os.AsyncTask;
+import androidx.appcompat.app.AppCompatActivity;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
-import androidx.activity.EdgeToEdge;
-import androidx.appcompat.app.AppCompatActivity;
-import org.json.JSONArray;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+import org.json.JSONException;
 import org.json.JSONObject;
-import java.io.BufferedReader;
+import java.util.Properties;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.util.concurrent.ExecutionException;
+import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
 
-    TextView cityName, show;
-    Button search;
-    String url;
+    private EditText etCityName;
+    private TextView tvWeatherDetails, tvWindDetails, tvLocation;
+    private Button btnGetWeather;
+
+    private String API_KEY;
+    private final String BASE_URL = "https://api.openweathermap.org/data/2.5/weather?q=";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
 
-        cityName = findViewById(R.id.cityName);
-        search = findViewById(R.id.search);
-        show = findViewById(R.id.weather);
+        // Load API Key
+        API_KEY = getApiKey();
 
-        search.setOnClickListener(v -> {
-            Toast.makeText(MainActivity.this, "Fetching Weather Data...", Toast.LENGTH_SHORT).show();
-            String city = cityName.getText().toString().trim();
+        // Initialize UI components
+        etCityName = findViewById(R.id.etCityName);
+        tvWeatherDetails = findViewById(R.id.tvWeatherDetails);
+        tvWindDetails = findViewById(R.id.tvWindDetails);
+        tvLocation = findViewById(R.id.tvLocation);
+        btnGetWeather = findViewById(R.id.btnGetWeather);
 
-            if (!city.isEmpty()) {
-                url = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=98bc963c6535659b50c613a0e8207e95&units=metric"; // Added metric units
-                try {
-                    GetWeather task = new GetWeather();
-                    task.execute(url);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    show.setText("Error fetching weather data.");
-                }
-            } else {
-                Toast.makeText(MainActivity.this, "Enter a City Name", Toast.LENGTH_SHORT).show();
+        btnGetWeather.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                fetchWeather();
             }
         });
     }
 
-    class GetWeather extends AsyncTask<String, Void, String> {
-        @Override
-        protected String doInBackground(String... urls) {
-            StringBuilder result = new StringBuilder();
-            HttpURLConnection urlConnection = null;
-            BufferedReader reader = null;
+    // Securely get API key from local.properties
+    private String getApiKey() {
+        Properties properties = new Properties();
+        try {
+            InputStream inputStream = getAssets().open("local.properties");
+            properties.load(inputStream);
+        } catch (IOException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "API Key not found!", Toast.LENGTH_SHORT).show();
+        }
+        return properties.getProperty("API_KEY", "default_value_if_missing");
+    }
 
-            try {
-                URL url = new URL(urls[0]);
-                urlConnection = (HttpURLConnection) url.openConnection();
-                urlConnection.connect();
+    private void fetchWeather() {
+        String cityName = etCityName.getText().toString().trim();
 
-                InputStream inputStream = urlConnection.getInputStream();
-                reader = new BufferedReader(new InputStreamReader(inputStream));
-
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    result.append(line).append("\n");
-                }
-                return result.toString();
-            } catch (Exception e) {
-                e.printStackTrace();
-                return null;
-            } finally {
-                try {
-                    if (reader != null) reader.close();
-                    if (urlConnection != null) urlConnection.disconnect();
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
+        if (cityName.isEmpty()) {
+            Toast.makeText(this, "Please enter a city name", Toast.LENGTH_SHORT).show();
+            return;
         }
 
-        @Override
-        protected void onPostExecute(String result) {
-            super.onPostExecute(result);
-            if (result != null) {
-                try {
-                    JSONObject jsonObject = new JSONObject(result);
+        String url = BASE_URL + cityName + "&appid=" + API_KEY + "&units=metric";
 
-                    // Extract temperature data
-                    JSONObject mainObject = jsonObject.getJSONObject("main");
-                    double temperature = mainObject.getDouble("temp");
-                    double feelsLike = mainObject.getDouble("feels_like");
-                    int humidity = mainObject.getInt("humidity");
+        RequestQueue queue = Volley.newRequestQueue(this);
+        JsonObjectRequest request = new JsonObjectRequest(Request.Method.GET, url, null,
+                new Response.Listener<JSONObject>() {
+                    @Override
+                    public void onResponse(JSONObject response) {
+                        try {
+                            if (response.has("main") && response.has("wind") && response.has("name")) {
+                                JSONObject main = response.getJSONObject("main");
+                                double temperature = main.optDouble("temp", -1);
+                                double windSpeed = response.getJSONObject("wind").optDouble("speed", -1);
+                                String cityName = response.optString("name", "Unknown");
 
-                    // Extract weather condition
-                    JSONArray weatherArray = jsonObject.getJSONArray("weather");
-                    JSONObject weatherObject = weatherArray.getJSONObject(0);
-                    String weatherCondition = weatherObject.getString("main");
-                    String description = weatherObject.getString("description");
+                                if (temperature == -1 || windSpeed == -1 || cityName.equals("Unknown")) {
+                                    Toast.makeText(MainActivity.this, "Invalid response from server!", Toast.LENGTH_SHORT).show();
+                                    return;
+                                }
 
-                    // Extract wind speed
-                    JSONObject windObject = jsonObject.getJSONObject("wind");
-                    double windSpeed = windObject.getDouble("speed");
+                                tvWeatherDetails.setText("Temperature: " + temperature + "°C");
+                                tvWindDetails.setText("Wind Speed: " + windSpeed + " m/s");
+                                tvLocation.setText("City: " + cityName);
+                            } else {
+                                Toast.makeText(MainActivity.this, "Invalid city name! Try again.", Toast.LENGTH_SHORT).show();
+                            }
+                        } catch (JSONException e) {
+                            Log.e("WeatherApp", "JSON Error: " + e.getMessage());
+                            Toast.makeText(MainActivity.this, "Error parsing weather data!", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                },
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e("WeatherApp", "API Error: " + error.toString());
+                        Toast.makeText(MainActivity.this, "Failed to fetch weather data! Check your internet connection.", Toast.LENGTH_SHORT).show();
+                    }
+                });
 
-                    // Extract city name
-                    String cityName = jsonObject.getString("name");
-
-                    // Display the extracted data
-                    String weatherInfo = "City: " + cityName +
-                            "\nTemperature: " + temperature + "°C" +
-                            "\nFeels Like: " + feelsLike + "°C" +
-                            "\nWeather: " + weatherCondition + " (" + description + ")" +
-                            "\nHumidity: " + humidity + "%" +
-                            "\nWind Speed: " + windSpeed + " m/s";
-
-                    show.setText(weatherInfo);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    show.setText("Error parsing weather data.");
-                }
-            } else {
-                show.setText("Failed to retrieve weather data.");
-            }
-        }
+        queue.add(request);
     }
 }
